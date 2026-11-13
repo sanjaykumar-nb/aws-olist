@@ -46,6 +46,7 @@
     </nav>
     <div class="sidebar-foot">
       <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Connecting</span></div>
+      <button class="foot-link" id="key-open" type="button" hidden>Change API key</button>
       <a class="foot-link" href="/docs" target="_blank" rel="noopener">OpenAPI docs<svg><use href="#i-external"/></svg></a>
     </div>
   </aside>
@@ -157,6 +158,19 @@
     </section>
   </div>
 </div>
+
+<dialog id="key-dialog" class="glass">
+  <form method="dialog" id="key-form">
+    <h2>API key required</h2>
+    <p class="hint">This server is protected. Enter the value of <code>OLIST_API_KEY</code>. It is kept in this browser only.</p>
+    <input id="key-input" type="password" autocomplete="off" placeholder="API key" required>
+    <p class="key-err" id="key-err" hidden>That key was rejected.</p>
+    <div class="dialog-actions">
+      <button class="btn" type="button" id="key-forget">Forget key</button>
+      <button class="btn btn-primary" type="submit">Unlock</button>
+    </div>
+  </form>
+</dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="/static/app.js"></script>

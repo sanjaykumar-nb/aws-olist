@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS events (
     payload     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_events_type ON events(event_type);
+CREATE INDEX IF NOT EXISTS ix_events_time ON events(event_time);
 
 -- Orders created by the simulator that still have lifecycle steps left.
 CREATE TABLE IF NOT EXISTS sim_inflight (

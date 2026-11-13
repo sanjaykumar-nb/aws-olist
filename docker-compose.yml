@@ -1,3 +1,5 @@
+name: olist
+
 services:
   api:
     build: .
@@ -5,17 +7,26 @@ services:
     container_name: olist-source
     restart: unless-stopped
     ports:
-      - "${OLIST_PORT:-8000}:8000"
+      # OLIST_BIND=127.0.0.1 keeps it reachable only from the host (e.g. behind Nginx/Caddy)
+      - "${OLIST_BIND:-0.0.0.0}:${OLIST_PORT:-8000}:8000"
     environment:
+      OLIST_API_KEY: ${OLIST_API_KEY:-}
+      OLIST_AUTOSTART: ${OLIST_AUTOSTART:-false}
       OLIST_ORDERS_PER_SEC: ${OLIST_ORDERS_PER_SEC:-1}
+      OLIST_EVENT_RETENTION_HOURS: ${OLIST_EVENT_RETENTION_HOURS:-168}
     volumes:
-      # the 9 CSVs, read-only (path on your machine, set in .env)
+      # the 9 CSVs, read-only (host path set in .env; on EC2: /opt/olist/dataset)
       - type: bind
         source: ${OLIST_DATASET_HOST_DIR:?Set OLIST_DATASET_HOST_DIR in .env to the folder with the 9 CSVs}
         target: /dataset
         read_only: true
       # SQLite DB with loaded + simulated data; survives container rebuilds
       - olist-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   olist-data:

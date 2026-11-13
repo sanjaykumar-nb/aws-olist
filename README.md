@@ -34,6 +34,87 @@ than one replica.
 > If `pip install` fails during the build with `Network is unreachable`, Docker's bridge
 > network has no internet access on that machine. Build with host networking instead:
 > `docker build --network host -t olist-source:latest .` then `docker compose up -d`.
+> If the build hangs on `load metadata for docker.io/library/python:3.11-slim` (slow
+> registry access) and the base image is already pulled, add `DOCKER_BUILDKIT=0` in front of
+> that command to use the classic builder.
+
+## Deploy on EC2 (Docker)
+
+**1. Put the CSVs in S3** (from your machine; recommended):
+
+```bash
+aws s3 cp ./dataset/ s3://<your-bucket>/olist/ --recursive --exclude "*" --include "*.csv"
+```
+
+**2. Launch the instance**
+
+| Setting | Value |
+|---|---|
+| AMI | Amazon Linux 2023 (Ubuntu 22.04/24.04 also works) |
+| Type | `t3.small` (2 GB RAM). `t3.micro` works at low stream rates |
+| Disk | 20 GB gp3 |
+| IAM role | `s3:ListBucket` + `s3:GetObject` on the dataset bucket/prefix (only if using S3) |
+| Security group | SSH 22 from your IP. TCP 8000 from your IP and your pipeline's security group. **Not** `0.0.0.0/0` |
+
+Use the same region and VPC as your pipeline (Glue, Lambda, Kinesis…) so it can call the
+instance's **private** IP.
+
+**3. Run the setup script on the instance**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sanjaykumar-nb/aws-olist/main/deploy/ec2-setup.sh -o ec2-setup.sh
+sudo DATASET_S3_URI=s3://<your-bucket>/olist/ bash ec2-setup.sh
+```
+
+The script:
+- installs Docker, the compose plugin and git
+- clones this repo to `/opt/olist/app`
+- syncs the CSVs to `/opt/olist/dataset`
+- writes `/opt/olist/app/.env` with a **generated API key** and stream autostart on
+- builds and starts the container, then waits until it is healthy
+
+Re-running it pulls the latest `main` and rebuilds; your `.env` and data are kept.
+Without S3, copy the CSVs to `/opt/olist/dataset` first (e.g. with `scp`), then run the
+script without `DATASET_S3_URI`.
+
+| Path on the instance | What |
+|---|---|
+| `/opt/olist/app` | Code and `.env` (settings, API key) |
+| `/opt/olist/dataset` | The 9 CSVs, mounted read-only into the container |
+| Docker volume `olist_olist-data` | SQLite DB with loaded and simulated data (survives rebuilds and reboots) |
+
+**4. Use it**
+
+```bash
+sudo grep OLIST_API_KEY /opt/olist/app/.env                # your key
+curl -H "X-API-Key: <key>" http://<ip>:8000/api/v1/datasets
+```
+
+Open `http://<ip>:8000/` and enter the key once. Browser links and the live feed send it
+as `?api_key=` because they cannot set headers.
+
+The container restarts on reboot (`restart: unless-stopped`). Logs are capped at
+3 × 10 MB. Events older than `OLIST_EVENT_RETENTION_HOURS` (default 7 days) are
+deleted, so your consumer must read the event log within that window.
+
+**Optional HTTPS:** set `OLIST_BIND=127.0.0.1` in `.env`, then put
+[Caddy](https://caddyserver.com/) in front with a DNS name pointing at the instance
+(`reverse_proxy 127.0.0.1:8000`). Caddy gets the certificate itself and does not buffer
+the event feed. With Nginx, set `proxy_buffering off;` for `/api/v1/stream/events`.
+
+### Settings (`.env`)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OLIST_DATASET_HOST_DIR` | – (required) | Host folder with the 9 CSVs |
+| `OLIST_PORT` | `8000` | Host port |
+| `OLIST_BIND` | `0.0.0.0` | Host interface. `127.0.0.1` when behind a reverse proxy |
+| `OLIST_API_KEY` | empty (open) | Required on all `/api/v1` calls except `/health` when set |
+| `OLIST_AUTOSTART` | `false` | Start the simulator with the server |
+| `OLIST_ORDERS_PER_SEC` | `1` | Simulator rate |
+| `OLIST_EVENT_RETENTION_HOURS` | `168` | Event log retention. `0` keeps events forever |
+
+Apply changes with `cd /opt/olist/app && sudo docker compose up -d`.
 
 ## Run without Docker
 
@@ -74,6 +155,9 @@ plus one audit column, **`updated_at`** (UTC ISO), set on load and on every inse
 Historical rows all share the load time.
 
 ## Endpoints (`/api/v1`)
+
+When `OLIST_API_KEY` is set, send it on every call except `/health`: use the
+`X-API-Key: <key>` header, or `?api_key=<key>` where headers are not possible.
 
 | Method | Path | Purpose |
 |---|---|---|

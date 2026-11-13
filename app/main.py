@@ -7,13 +7,14 @@
 
 import asyncio
 import csv
+import hmac
 import io
 import json
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -38,6 +39,11 @@ STATIC = config.ROOT / "app" / "static"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await asyncio.to_thread(ensure_loaded, log=lambda m: print(m, flush=True))
+    if config.AUTOSTART:
+        simulator.start()
+        print(f"Stream autostarted at {simulator.rate} orders/sec", flush=True)
+    if config.API_KEY:
+        print("API key required for /api/v1 (except /health)", flush=True)
     yield
     simulator.stop()
 
@@ -50,6 +56,27 @@ app = FastAPI(
     lifespan=lifespan,
 )
 API = "/api/v1"
+OPEN_PATHS = {f"{API}/health"}
+
+
+@app.middleware("http")
+async def require_api_key(request: Request, call_next):
+    """If OLIST_API_KEY is set, protect the API. The UI shell and /docs stay public;
+    they contain no data."""
+    key = config.API_KEY
+    path = request.url.path
+    if key and path.startswith(API) and path not in OPEN_PATHS:
+        given = request.headers.get("x-api-key") or request.query_params.get("api_key") or ""
+        if not hmac.compare_digest(given.encode(), key.encode()):
+            return JSONResponse({"detail": "Missing or invalid API key"}, status_code=401,
+                                headers={"WWW-Authenticate": "ApiKey"})
+    return await call_next(request)
+
+
+@app.get(f"{API}/auth", tags=["meta"], include_in_schema=False)
+def auth_check():
+    """200 if the caller's key is accepted (used by the UI to validate a key)."""
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- helpers
@@ -87,7 +114,7 @@ def _where(name: str, request: Request, updated_since: str | None, cursor: int |
 def health():
     with session() as conn:
         conn.execute("SELECT 1")
-    return {"status": "ok", "server_time": now_iso()}
+    return {"status": "ok", "server_time": now_iso(), "auth_required": bool(config.API_KEY)}
 
 
 @app.get(f"{API}/datasets", tags=["meta"])

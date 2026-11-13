@@ -22,10 +22,10 @@ import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from . import config
-from .db import connect, now_iso
+from .db import ISO_FMT, connect, now_iso
 
 # Lifecycle step delays in real seconds: (min, max)
 DELAYS = {
@@ -41,7 +41,22 @@ ADDRESS_CHANGE_RATE = 0.05  # per new order, chance an existing customer changes
 PAYMENT_TYPES = [("credit_card", 0.74), ("boleto", 0.19), ("voucher", 0.055), ("debit_card", 0.015)]
 TICK = 0.25
 
+PRUNE_EVERY = 60.0  # seconds between event-retention sweeps
+
 log = logging.getLogger("olist.simulator")
+
+
+def prune_events(conn) -> int:
+    """Delete events older than OLIST_EVENT_RETENTION_HOURS. Source-table rows are kept."""
+    hours = config.EVENT_RETENTION_HOURS
+    if hours <= 0:
+        return 0
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime(ISO_FMT)
+    n = conn.execute("DELETE FROM events WHERE event_time < ?", (cutoff,)).rowcount
+    conn.commit()
+    if n:
+        log.info("pruned %d events older than %s", n, cutoff)
+    return n
 
 
 def _ts(dt: datetime | None = None) -> str:
@@ -109,8 +124,16 @@ class Simulator:
                 return
             pending = 0.0
             last = time.monotonic()
+            next_prune = 0.0
             while not self._stop.is_set():
                 now = time.monotonic()
+                if now >= next_prune:
+                    try:
+                        prune_events(conn)
+                    except sqlite3.Error as e:
+                        conn.rollback()
+                        self.last_error = f"prune failed: {e}"
+                    next_prune = now + PRUNE_EVERY
                 pending += self.rate * (now - last) * random.uniform(0.6, 1.4)
                 last = now
                 try:

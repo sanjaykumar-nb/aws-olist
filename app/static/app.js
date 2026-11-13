@@ -42,8 +42,65 @@ function toast(msg, isErr = false) {
   toast.timer = setTimeout(() => (t.className = ""), 2400);
 }
 
+/* ---------------- API key (only when the server sets OLIST_API_KEY) ---------------- */
+const KEY_STORE = "olist.apiKey";
+const auth = { required: false, key: "" };
+try {
+  auth.key = localStorage.getItem(KEY_STORE) || "";
+} catch {}
+
+function saveKey(k) {
+  auth.key = k;
+  try {
+    k ? localStorage.setItem(KEY_STORE, k) : localStorage.removeItem(KEY_STORE);
+  } catch {}
+}
+
+// EventSource and plain links cannot send headers, so they carry the key as ?api_key=
+function withKey(url) {
+  if (!auth.required || !auth.key) return url;
+  return url + (url.includes("?") ? "&" : "?") + "api_key=" + encodeURIComponent(auth.key);
+}
+
+function askForKey(rejected = false) {
+  const d = $("key-dialog");
+  if (d.open) return; // background polls also hit 401; don't wipe what the user is typing
+  $("key-err").hidden = !rejected;
+  $("key-input").value = "";
+  d.showModal();
+  $("key-input").focus();
+}
+
+$("key-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const k = $("key-input").value.trim();
+  if (!k) return;
+  const r = await fetch(API + "/auth", { headers: { "X-API-Key": k } });
+  if (!r.ok) {
+    $("key-err").hidden = false;
+    $("key-input").select();
+    return;
+  }
+  saveKey(k);
+  $("key-dialog").close();
+  toast("Unlocked");
+  refreshAll();
+});
+$("key-forget").addEventListener("click", () => {
+  saveKey("");
+  $("key-input").value = "";
+  toast("Key removed from this browser");
+});
+$("key-open").addEventListener("click", () => askForKey(false));
+
 async function api(path, opts = {}) {
-  const r = await fetch(API + path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const headers = { "Content-Type": "application/json" };
+  if (auth.key) headers["X-API-Key"] = auth.key;
+  const r = await fetch(API + path, { headers, ...opts });
+  if (r.status === 401) {
+    askForKey(!!auth.key);
+    throw new Error("API key required");
+  }
   if (!r.ok) {
     let detail = r.statusText;
     try {
@@ -80,7 +137,9 @@ window.addEventListener("hashchange", route);
 async function checkHealth() {
   const el = $("conn");
   try {
-    await api("/health");
+    const h = await api("/health");
+    auth.required = !!h.auth_required;
+    $("key-open").hidden = !auth.required;
     el.className = "conn ok";
     $("conn-text").textContent = "API connected";
   } catch {
@@ -200,7 +259,7 @@ async function loadDatasets() {
       <td class="mono">${d.source_file}</td>
       <td><div class="row-actions">
         <button class="btn btn-sm" data-browse="${d.name}" type="button">Browse</button>
-        <a class="btn btn-sm" href="${API}/export/${d.name}.csv" download><svg><use href="#i-download"/></svg>CSV</a>
+        <a class="btn btn-sm" href="${esc(withKey(`${API}/export/${d.name}.csv`))}" download><svg><use href="#i-download"/></svg>CSV</a>
       </div></td></tr>`
     )
     .join("");
@@ -247,7 +306,7 @@ function syncRequestUrls() {
   const qs = queryParams(true).toString();
   $("q-url").innerHTML = `<b>GET</b> ${esc(`${API}/data/${state.q.ds}?${qs}`)}`;
   const csv = queryParams(false).toString();
-  $("q-csv").href = `${API}/export/${state.q.ds}.csv${csv ? "?" + csv : ""}`;
+  $("q-csv").href = withKey(`${API}/export/${state.q.ds}.csv${csv ? "?" + csv : ""}`);
 }
 
 async function runQuery(reset) {
@@ -416,9 +475,12 @@ $("d-copy").addEventListener("click", () => {
   if (ev) copy(JSON.stringify(ev, null, 2), "Event JSON copied");
 });
 
+let eventSource = null;
 function connectStream() {
-  const es = new EventSource(`${API}/stream/events`);
-  es.onmessage = (m) => onEvent(JSON.parse(m.data));
+  if (auth.required && !auth.key) return;
+  eventSource?.close();
+  eventSource = new EventSource(withKey(`${API}/stream/events`));
+  eventSource.onmessage = (m) => onEvent(JSON.parse(m.data));
   // EventSource reconnects on its own and resumes via Last-Event-ID
 }
 
@@ -507,10 +569,12 @@ const ENDPOINTS = [
 ];
 function curlFor(m, p) {
   const url = `${location.origin}${API}${p}`;
-  if (m === "POST") return `curl -X POST "${url}" -H "Content-Type: application/json" -d '{"orders_per_sec": 2}'`;
-  if (p.startsWith("/export")) return `curl -o ${p.split("/")[2].split("?")[0]} "${url}"`;
-  if (p === "/stream/events") return `curl -N "${url}"`;
-  return `curl "${url}"`;
+  // reference the key by env var so it never lands in a clipboard or shell history
+  const k = auth.required && p !== "/health" ? ` -H "X-API-Key: $OLIST_API_KEY"` : "";
+  if (m === "POST") return `curl -X POST "${url}"${k} -H "Content-Type: application/json" -d '{"orders_per_sec": 2}'`;
+  if (p.startsWith("/export")) return `curl -o ${p.split("/")[2].split("?")[0]}${k} "${url}"`;
+  if (p === "/stream/events") return `curl -N${k} "${url}"`;
+  return `curl${k} "${url}"`;
 }
 let lastGroup = "";
 $("endpoints").innerHTML = ENDPOINTS.map(([g, m, p, d], i) => {
@@ -528,13 +592,19 @@ $("endpoints").addEventListener("click", (e) => {
 });
 
 /* ---------------- boot ---------------- */
+function refreshAll() {
+  pollSim();
+  loadDatasets();
+  connectStream();
+}
+
 route();
 renderFeed();
 renderTypeBars({});
-checkHealth();
-pollSim();
-loadDatasets();
-connectStream();
+checkHealth().then(() => {
+  if (auth.required && !auth.key) askForKey(false);
+  else refreshAll();
+});
 setInterval(checkHealth, 10000);
 setInterval(pollSim, 1500);
 setInterval(loadDatasets, 5000);
