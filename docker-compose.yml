@@ -1,0 +1,21 @@
+services:
+  api:
+    build: .
+    image: olist-source:latest
+    container_name: olist-source
+    restart: unless-stopped
+    ports:
+      - "${OLIST_PORT:-8000}:8000"
+    environment:
+      OLIST_ORDERS_PER_SEC: ${OLIST_ORDERS_PER_SEC:-1}
+    volumes:
+      # the 9 CSVs, read-only (path on your machine, set in .env)
+      - type: bind
+        source: ${OLIST_DATASET_HOST_DIR:?Set OLIST_DATASET_HOST_DIR in .env to the folder with the 9 CSVs}
+        target: /dataset
+        read_only: true
+      # SQLite DB with loaded + simulated data; survives container rebuilds
+      - olist-data:/data
+
+volumes:
+  olist-data:

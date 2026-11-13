@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Olist Source</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-overview" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-chevron-l" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-chevron-r" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  </defs>
+</svg>
+
+<div class="shell">
+  <aside class="sidebar glass">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"></div>
+      <div>
+        <div class="brand-name">Olist Source</div>
+        <div class="brand-sub">Data source console</div>
+      </div>
+    </div>
+    <nav aria-label="Sections">
+      <a href="#overview" data-view="overview"><svg><use href="#i-overview"/></svg>Overview</a>
+      <a href="#data" data-view="data"><svg><use href="#i-table"/></svg>Data</a>
+      <a href="#stream" data-view="stream"><svg><use href="#i-activity"/></svg>Event stream</a>
+      <a href="#api" data-view="api"><svg><use href="#i-code"/></svg>API reference</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Connecting</span></div>
+      <a class="foot-link" href="/docs" target="_blank" rel="noopener">OpenAPI docs<svg><use href="#i-external"/></svg></a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar glass">
+      <h1 id="view-title">Overview</h1>
+      <div class="sim-control" role="group" aria-label="Streaming simulator">
+        <span class="badge" id="sim-badge"><span class="dot"></span><span id="sim-badge-text">Stopped</span></span>
+        <label class="rate">
+          <span>Orders/s</span>
+          <input id="rate" type="number" min="0.1" max="50" step="0.5" value="1" inputmode="decimal">
+        </label>
+        <button class="btn btn-primary" id="sim-btn" type="button" aria-label="Start stream">
+          <svg><use href="#i-play"/></svg><span>Start stream</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- OVERVIEW -->
+    <section class="view" id="view-overview">
+      <div class="kpis">
+        <div class="kpi glass"><div class="kpi-label">Rows served</div><div class="kpi-value" id="k-rows">–</div><div class="kpi-sub" id="k-rows-sub">across 9 datasets</div></div>
+        <div class="kpi glass"><div class="kpi-label">Simulated rows</div><div class="kpi-value" id="k-sim">–</div><div class="kpi-sub">added since load</div></div>
+        <div class="kpi glass"><div class="kpi-label">Events in log</div><div class="kpi-value" id="k-events">–</div><div class="kpi-sub" id="k-events-sub">last id –</div></div>
+        <div class="kpi glass"><div class="kpi-label">Throughput</div><div class="kpi-value" id="k-eps">0<small> ev/s</small></div><div class="kpi-sub" id="k-inflight">0 orders in flight</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel glass">
+          <div class="panel-head"><h2>Event throughput</h2><span class="hint">events per second · last 2 min</span></div>
+          <canvas id="chart" height="180" aria-label="Events per second chart"></canvas>
+        </div>
+        <div class="panel glass">
+          <div class="panel-head"><h2>Events this run</h2><span class="hint" id="run-started">not running</span></div>
+          <div id="type-bars" class="type-bars"></div>
+        </div>
+      </div>
+
+      <div class="panel glass">
+        <div class="panel-head"><h2>Datasets</h2><span class="hint" id="ds-refreshed"></span></div>
+        <div class="table-wrap">
+          <table class="ds-table">
+            <thead><tr><th>Dataset</th><th class="num">Rows</th><th class="num">Simulated</th><th>Last updated (UTC)</th><th>Source file</th><th></th></tr></thead>
+            <tbody id="ds-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- DATA -->
+    <section class="view" id="view-data" hidden>
+      <div class="panel glass">
+        <div class="toolbar">
+          <label class="field"><span>Dataset</span><select id="q-ds"></select></label>
+          <label class="field"><span>Column</span><select id="q-col"><option value="">None</option></select></label>
+          <label class="field grow"><span>Equals</span><input id="q-val" placeholder="value" autocomplete="off"></label>
+          <label class="field grow"><span>Updated since</span><input id="q-since" placeholder="2026-11-13T04:20:00Z" autocomplete="off"></label>
+          <label class="field"><span>Rows</span><select id="q-limit"><option>25</option><option selected>50</option><option>100</option><option>500</option></select></label>
+          <div class="toolbar-actions">
+            <button class="btn btn-primary" id="q-run" type="button">Run query</button>
+            <a class="btn" id="q-csv" href="#"><svg><use href="#i-download"/></svg>CSV</a>
+          </div>
+        </div>
+        <div class="request">
+          <code id="q-url"></code>
+          <button class="icon-btn" id="q-copy" type="button" title="Copy request URL" aria-label="Copy request URL"><svg><use href="#i-copy"/></svg></button>
+        </div>
+        <div class="table-wrap tall"><table class="data-table" id="q-table"></table></div>
+        <div class="pager">
+          <span class="hint" id="q-info"></span>
+          <div class="pager-btns">
+            <button class="icon-btn" id="q-prev" type="button" aria-label="Previous page"><svg><use href="#i-chevron-l"/></svg></button>
+            <span id="q-page" class="hint">Page 1</span>
+            <button class="icon-btn" id="q-next" type="button" aria-label="Next page"><svg><use href="#i-chevron-r"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STREAM -->
+    <section class="view" id="view-stream" hidden>
+      <div class="stream-layout">
+        <div class="panel glass feed-panel">
+          <div class="panel-head">
+            <h2>Live events</h2>
+            <div class="head-actions">
+              <select id="f-type" aria-label="Filter event type"><option value="">All event types</option></select>
+              <button class="btn btn-sm" id="f-pause" type="button"><svg><use href="#i-pause"/></svg><span>Pause</span></button>
+              <button class="icon-btn" id="f-clear" type="button" title="Clear list" aria-label="Clear list"><svg><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+          <div class="feed-cols"><span>ID</span><span>Type</span><span>Entity</span><span>Summary</span><span>Time</span></div>
+          <ol id="feed" class="feed"></ol>
+        </div>
+        <div class="panel glass detail-panel">
+          <div class="panel-head"><h2>Event detail</h2><button class="icon-btn" id="d-copy" type="button" title="Copy JSON" aria-label="Copy JSON" disabled><svg><use href="#i-copy"/></svg></button></div>
+          <pre id="detail" class="detail"><span class="hint">Select an event to inspect its payload.</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- API -->
+    <section class="view" id="view-api" hidden>
+      <div class="panel glass">
+        <div class="panel-head"><h2>Endpoints</h2><span class="hint">Base path <code>/api/v1</code> · copy any row as a curl command</span></div>
+        <div id="endpoints" class="endpoints"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
